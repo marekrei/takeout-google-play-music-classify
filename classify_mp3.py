@@ -5,7 +5,7 @@ import os
 import pathlib
 import re
 
-FILES_DIR = "../Takeout/Google Play Musique/Titres"
+FILES_DIR = "../mp3s"
 
 logging.getLogger("eyed3").setLevel(logging.CRITICAL)
 
@@ -47,7 +47,7 @@ def get_data_from_filename(file_path):
     return data
 
 
-for mp3_path in glob.glob(FILES_DIR + "/*.mp3"):
+def get_song_data(mp3_path):
     id3 = eyed3.load(mp3_path).tag
 
     filename_infos = get_data_from_filename(mp3_path)
@@ -55,6 +55,7 @@ for mp3_path in glob.glob(FILES_DIR + "/*.mp3"):
     artist = id3.artist
     if artist is None:
         artist = filename_infos.get("artist")
+    artist = artist[:150]
 
     # format name only if only standard chars (don't want to rename V▲LH▲LL)
     if re.match(r'^[ a-zA-Z0-9_-]+$', artist):
@@ -71,14 +72,43 @@ for mp3_path in glob.glob(FILES_DIR + "/*.mp3"):
         title = filename_infos.get("title")
 
     track_num = id3.track_num
+    
+    return artist, album, year, title, track_num
 
-    album = (f"({year}) " if year is not None else "") + album
+albums = {}
+
+for mp3_path in glob.glob(FILES_DIR + "/*.mp3"):
+    artist, album, year, title, track_num = get_song_data(mp3_path)
+        
+    if album not in albums:
+        albums[album] = {}
+    if artist not in albums[album]:
+        albums[album][artist] = 0
+    albums[album][artist] += 1
+    
+    
+    
+for mp3_path in glob.glob(FILES_DIR + "/*.mp3"):
+    artist, album, year, title, track_num = get_song_data(mp3_path)
+    
+    if len(albums[album]) == 1 and sum([albums[album][key] for key in albums[album]]) > 4:
+        # one artist, many songs
+        album_dir = artist + " - " + year + " - " + album
+    elif sum([albums[album][key] for key in albums[album]]) <= 4:
+        # small number of songs on the album
+        album_dir = "Individual MP3s"
+        track_num = None
+        title = artist + " - " + title
+    else:
+        # many songs but also many artists
+        title = artist + " - " + title
+        album_dir = "Various Artists - " + album
 
     filename = f"{track_num[0]:02} - " if track_num is not None else ""
     filename = f"{filename}{title}.mp3".replace(os.path.sep, "-")
 
     # Create directories & file
-    dir_path = os.path.join(FILES_DIR, artist, album)
+    dir_path = os.path.join(FILES_DIR, album_dir)
     file_path = os.path.join(dir_path, filename)
 
     pathlib.Path(dir_path).mkdir(parents=True, exist_ok=True)
